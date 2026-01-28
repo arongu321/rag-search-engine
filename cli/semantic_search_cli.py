@@ -7,7 +7,8 @@ from lib.semantic_search import (
     embed_text, 
     verify_embeddings, 
     embed_query_text,
-    SemanticSearch
+    semantic_search,
+    chunk_text,
 )
 
 def main():
@@ -26,7 +27,12 @@ def main():
     search_parser = subparsers.add_parser("search", help="Search for similar documents given a query")
     search_parser.add_argument("query", type=str, help="Query text to search for")
     search_parser.add_argument("--limit", type=int, default=5, help="Number of top results to return")
-
+    
+    chunk_parser = subparsers.add_parser("chunk", help="Chunk a document into smaller pieces")
+    chunk_parser.add_argument("text", type=str, help="Text to chunk")
+    chunk_parser.add_argument("--chunk-size", type=int, default=200, help="Size of each chunk")
+    chunk_parser.add_argument("--overlap", type=int, default=50, help="Overlap size between chunks")
+    
     args = parser.parse_args()
     match args.command:
         case "verify":
@@ -38,15 +44,9 @@ def main():
         case "embedquery":
             embed_query_text(args.query)
         case "search":
-            semantic_search = SemanticSearch()
-            with open("data/movies.json", "r") as f:
-                documents = json.load(f)["movies"]
-            semantic_search.load_or_create_embeddings(documents)
-            results = semantic_search.search(args.query, args.limit)
-            for i, info in enumerate(results): 
-                print(f"{i+1}. {info['title']} (score: {info['score']:.4f})\n {info['description']}\n")
-                if i+1 >= args.limit:
-                    break
+            semantic_search(args.query, args.limit)
+        case "chunk":
+            chunk_text(args.text, args.chunk_size, args.overlap)
         case _:
             parser.print_help()
 
