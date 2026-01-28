@@ -109,6 +109,21 @@ class InvertedIndex:
         doc_length = self.doc_lengths.get(doc_id, 0)
         bm25_tf = (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * (doc_length / avg_doc_length)))
         return bm25_tf
+    
+    def bm25(self, doc_id, term) -> float:
+        bm25_tf = self.get_bm25_tf(doc_id, term)
+        bm25_idf = self.get_bm25_idf(term)
+        return bm25_tf * bm25_idf
+    
+    def bm25_search(self, query, limit):
+        tokens = tokenize_text(query)
+        scores = defaultdict(float)
+        for document in self.docmap.values():
+            doc_id = document["id"]
+            for token in tokens:
+                scores[doc_id] += self.bm25(doc_id, token)
+        ranked_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        return ranked_docs[:limit]
 
 
 def build_command() -> None:
@@ -165,6 +180,16 @@ def bm25_tf_command(doc_id: int, term: str, k1: float = BM25_K1) -> float:
     idx.load()
     processed_term = preprocess_text(term)
     return idx.get_bm25_tf(doc_id, processed_term, k1)
+
+def bm25_search_command(query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> list[dict]:
+    idx = InvertedIndex()
+    idx.load()
+    ranked_docs = idx.bm25_search(query, limit)
+    results = []
+    for doc_id, score in ranked_docs:
+        doc = idx.docmap[doc_id]
+        results.append((doc, score))
+    return results
 
 def preprocess_text(text: str) -> str:
     text = text.lower()
