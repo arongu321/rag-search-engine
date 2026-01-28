@@ -9,6 +9,10 @@ from .search_utils import (
     BM25_B,
     CACHE_DIR,
     DEFAULT_SEARCH_LIMIT,
+    INVERTED_INDEX_PATH,
+    TERM_FREQUENCIES_PATH,
+    DOC_LENGTHS_PATH,
+    DOC_MAP_PATH,
     load_movies,
     load_stopwords,
 )
@@ -19,10 +23,10 @@ class InvertedIndex:
         self.docmap: dict[int, dict] = {}
         self.term_frequencies = defaultdict(Counter)
         self.doc_lengths = {}
-        self.index_path = os.path.join(CACHE_DIR, "index.pkl")
-        self.docmap_path = os.path.join(CACHE_DIR, "docmap.pkl")
-        self.term_frequencies_path = os.path.join(CACHE_DIR, "term_frequencies.pkl")
-        self.doc_lengths_path = os.path.join(CACHE_DIR, "doc_lengths.pkl")
+        self.index_path = INVERTED_INDEX_PATH
+        self.docmap_path = DOC_MAP_PATH
+        self.term_frequencies_path = TERM_FREQUENCIES_PATH
+        self.doc_lengths_path = DOC_LENGTHS_PATH
 
     def build(self) -> None:
         movies = load_movies()

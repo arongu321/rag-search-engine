@@ -1,6 +1,6 @@
 from sentence_transformers import SentenceTransformer, util
 import numpy as np
-import json
+import re
 import os
 from torch import embedding
 from .search_utils import (
@@ -8,10 +8,11 @@ from .search_utils import (
     DEFAULT_SEARCH_LIMIT,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_CHUNK_OVERLAP,
+    SEMANTIC_CHUNK_MAX_SIZE,
+    MOVIE_EMBEDDINGS_PATH,
     load_movies,
+    cosine_similarity,
 )
-
-MOVIE_EMBEDDINGS_PATH = os.path.join(CACHE_DIR, "movie_embeddings.npy")
 
 class SemanticSearch:
     def __init__(self, model_name: str = "all-MiniLM-L6-v2") -> None:
@@ -34,7 +35,7 @@ class SemanticSearch:
             document_str = f"{document['title']}: {document['description']}"
             document_texts.append(document_str)
         self.embeddings = self.model.encode(document_texts, show_progress_bar=True)
-        np.save("cache/movie_embeddings.npy", self.embeddings)
+        np.save(MOVIE_EMBEDDINGS_PATH, self.embeddings)
         return self.embeddings
     
     def load_or_create_embeddings(self, documents):
@@ -88,16 +89,6 @@ def embed_query_text(query: str):
     print(f"Shape: {embedding.shape}")
     return embedding
 
-def cosine_similarity(vec1, vec2):
-    dot_product = np.dot(vec1, vec2)
-    norm1 = np.linalg.norm(vec1)
-    norm2 = np.linalg.norm(vec2)
-
-    if norm1 == 0 or norm2 == 0:
-        return 0.0
-
-    return dot_product / (norm1 * norm2)
-
 def semantic_search(query, limit=DEFAULT_SEARCH_LIMIT):
     semantic_search = SemanticSearch()
     documents = load_movies()
@@ -136,3 +127,30 @@ def chunk_text(
     print(f"Chunking {len(text)} characters")
     for i, chunk in enumerate(chunks):
         print(f"{i + 1}. {chunk}")
+        
+def semantic_chunking(
+    text: str,
+    max_chunk_size: int = SEMANTIC_CHUNK_MAX_SIZE,
+    overlap: int = DEFAULT_CHUNK_OVERLAP,
+) -> list[str]:
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    chunks = []
+    current_chunk = []
+
+    for sentence in sentences:
+        if len(current_chunk) < max_chunk_size:
+            current_chunk.append(sentence)
+        else:
+            if current_chunk:
+                chunks.append(" ".join(current_chunk))
+            current_chunk = current_chunk[-overlap:] if overlap > 0 else []
+            current_chunk.append(sentence)
+
+    if current_chunk:
+        chunks.append(" ".join(current_chunk))
+    
+    print(f"Semantically chunking {len(text)} characters")
+    for i, chunk in enumerate(chunks):
+        print(f"{i + 1}. {chunk}")
+
+    return chunks
