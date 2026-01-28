@@ -10,6 +10,7 @@ from .search_utils import (
     load_movies,
     load_stopwords,
 )
+from .constants import BM25_K1
 
 class InvertedIndex:
     def __init__(self) -> None:
@@ -56,7 +57,11 @@ class InvertedIndex:
             self.term_frequencies[doc_id][token] += tokens.count(token)
     
     def get_tf(self, doc_id: int, term: str) -> int:
-        return self.term_frequencies[doc_id][term] if doc_id in self.term_frequencies else 0
+        tokens = tokenize_text(term)
+        if len(tokens) != 1:
+            raise ValueError("term must be a single token")
+        token = tokens[0]
+        return self.term_frequencies[doc_id][token] if doc_id in self.term_frequencies else 0
     
     def get_idf(self, term: str) -> float:
         tokens = tokenize_text(term)
@@ -82,6 +87,11 @@ class InvertedIndex:
         term_match_doc_count = len(self.index[token]) if token in self.index else 0
         idf = math.log((total_doc_count - term_match_doc_count + 0.5) / (term_match_doc_count + 0.5) + 1)
         return idf
+    
+    def get_bm25_tf(self, doc_id, term, k1=BM25_K1) -> float:
+        tf = self.get_tf(doc_id, term)
+        bm25_tf = (tf * (k1 + 1)) / (tf + k1)
+        return bm25_tf
 
 
 def build_command() -> None:
@@ -132,6 +142,12 @@ def bm25_idf_command(term: str) -> float:
     idx.load()
     processed_term = preprocess_text(term)
     return idx.get_bm25_idf(processed_term)
+
+def bm25_tf_command(doc_id: int, term: str, k1: float = BM25_K1) -> float:
+    idx = InvertedIndex()
+    idx.load()
+    processed_term = preprocess_text(term)
+    return idx.get_bm25_tf(doc_id, processed_term, k1)
 
 def preprocess_text(text: str) -> str:
     text = text.lower()
