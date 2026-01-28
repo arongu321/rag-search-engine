@@ -15,6 +15,7 @@ from .search_utils import (
     DOC_MAP_PATH,
     load_movies,
     load_stopwords,
+    format_search_result,
 )
 
 class InvertedIndex:
@@ -126,9 +127,19 @@ class InvertedIndex:
             doc_id = document["id"]
             for token in tokens:
                 scores[doc_id] += self.bm25(doc_id, token)
-        ranked_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-        return ranked_docs[:limit]
-
+        ranked_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:limit]
+        
+        results = []
+        for doc_id, score in ranked_docs:
+            doc = self.docmap[doc_id]
+            formatted_res = format_search_result(
+                doc_id=doc_id,
+                title=doc["title"],
+                document=doc["description"][:100],
+                score=score,
+            )
+            results.append(formatted_res)
+        return results
 
 def build_command() -> None:
     idx = InvertedIndex()

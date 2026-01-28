@@ -21,13 +21,13 @@ class SemanticSearch:
         self.documents = None
         self.document_map = {}
         
-    def generate_embedding(self, text: str):
+    def generate_embedding(self, text: str) -> np.ndarray:
         if not text or not text.strip():
             raise ValueError("Input text must be a non-empty string.")
         res = self.model.encode([text])
         return res[0]
 
-    def build_embeddings(self, documents):
+    def build_embeddings(self, documents) -> np.ndarray:
         self.documents = documents
         document_texts = []
         for document in documents:
@@ -38,7 +38,7 @@ class SemanticSearch:
         np.save(MOVIE_EMBEDDINGS_PATH, self.embeddings)
         return self.embeddings
     
-    def load_or_create_embeddings(self, documents):
+    def load_or_create_embeddings(self, documents) -> np.ndarray:
         self.documents = documents
         self.document_map = {}
         for document in documents:
@@ -50,7 +50,7 @@ class SemanticSearch:
 
         return self.build_embeddings(documents)
     
-    def search(self, query, limit=DEFAULT_SEARCH_LIMIT):
+    def search(self, query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> list[dict]:
         if self.embeddings is None:
             raise ValueError("No embeddings loaded. Call `load_or_create_embeddings` first.")
         query_embedding = self.generate_embedding(query)
@@ -133,11 +133,27 @@ def semantic_chunking(
     max_chunk_size: int = SEMANTIC_CHUNK_MAX_SIZE,
     overlap: int = DEFAULT_CHUNK_OVERLAP,
 ) -> list[str]:
+    # Strip leading and trailing whitespace from input text
+    text = text.strip()
+    
+    if not text:
+        print("Input text is empty after stripping whitespace. Returning empty chunk list.")
+        return []
+    
+    # Split text into sentences using regex
     sentences = re.split(r"(?<=[.!?])\s+", text)
+    
+    # Check if there's only one sentence and it doesn't end with a punctuation mark
+    if len(sentences) == 1 and not sentences[0].endswith(( '.', '!', '?' )):
+        print("Input text appears to be a single sentence without proper punctuation. Using fixed-size chunking instead.")
+        return fixed_size_chunking(text, chunk_size=max_chunk_size, overlap=overlap)
     chunks = []
     current_chunk = []
 
     for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence:
+            continue
         if len(current_chunk) < max_chunk_size:
             current_chunk.append(sentence)
         else:

@@ -1,7 +1,7 @@
 import json
 import os
 import numpy as np
-
+from typing import Any
 
 # Constants
 BM25_B = 0.75
@@ -12,6 +12,7 @@ DEFAULT_CHUNK_OVERLAP = 0
 SEMANTIC_CHUNK_MAX_SIZE = 4
 SEMANTIC_SEARCH_LIMIT = 10
 SCORE_PRECISION = 3
+HYBRID_ALPHA = 0.5
 
 # Root project directory
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -25,7 +26,7 @@ CACHE_DIR = os.path.join(PROJECT_ROOT, "cache")
 
 # Pickle paths
 DOC_LENGTHS_PATH = os.path.join(CACHE_DIR, "doc_lengths.pkl")
-DOC_MAP_PATH = os.path.join(CACHE_DIR, "doc_map.pkl")
+DOC_MAP_PATH = os.path.join(CACHE_DIR, "docmap.pkl")
 INVERTED_INDEX_PATH = os.path.join(CACHE_DIR, "index.pkl")
 MOVIE_EMBEDDINGS_PATH = os.path.join(CACHE_DIR, "movie_embeddings.npy")
 TERM_FREQUENCIES_PATH = os.path.join(CACHE_DIR, "term_frequencies.pkl")
@@ -51,3 +52,26 @@ def cosine_similarity(vec1, vec2):
         return 0.0
 
     return dot_product / (norm1 * norm2)
+
+def format_search_result(
+    doc_id: str, title: str, document: str, score: float, **metadata: Any
+) -> dict[str, Any]:
+    """Create standardized search result
+
+    Args:
+        doc_id: Document ID
+        title: Document title
+        document: Display text (usually short description)
+        score: Relevance/similarity score
+        **metadata: Additional metadata to include
+
+    Returns:
+        Dictionary representation of search result
+    """
+    return {
+        "id": doc_id,
+        "title": title,
+        "document": document,
+        "score": round(score, SCORE_PRECISION),
+        "metadata": metadata if metadata else {},
+    }
