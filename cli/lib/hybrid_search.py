@@ -5,6 +5,9 @@ from .chunked_semantic_search import ChunkedSemanticSearch
 from .search_utils import (
     load_movies,
     format_search_result,
+    DEFAULT_SEARCH_LIMIT,
+    HYBRID_ALPHA,
+    RRF_SEARCH_K,
 )
 
 
@@ -23,7 +26,7 @@ class HybridSearch:
         self.idx.load()
         return self.idx.bm25_search(query, limit)
 
-    def weighted_search(self, query, alpha, limit=5):
+    def weighted_search(self, query, alpha=HYBRID_ALPHA, limit=DEFAULT_SEARCH_LIMIT):
         res_bm25 = self._bm25_search(query, limit*500)
         res_chunked = self.semantic_search.search_chunks(query, limit*500)
         
@@ -75,10 +78,57 @@ class HybridSearch:
         
         return sorted(hybrid_res, key=lambda x: x['score'], reverse=True)[:limit]
 
-    def rrf_search(self, query, k, limit=10):
-        raise NotImplementedError("RRF hybrid search is not implemented yet.")
-    
-def hybrid_score(bm25_score, semantic_score, alpha=0.5):
+    def rrf_search(self, query, k=RRF_SEARCH_K, limit=DEFAULT_SEARCH_LIMIT):
+        res_bm25 = self._bm25_search(query, limit*500)
+        res_chunked = self.semantic_search.search_chunks(query, limit*500)
+        
+        doc_id_to_documents = {}
+        
+        for i, res in enumerate(res_bm25):
+            doc_id = res['id']
+            if doc_id not in doc_id_to_documents:
+                doc_id_to_documents[doc_id] = {
+                    "title": res['title'],
+                    "document": res['document'],
+                    "bm25_rank": i + 1,
+                    "semantic_rank": None,
+                    "rrf_score": rrf_score(i+1, k)
+                }
+            else:
+                doc_id_to_documents[doc_id]['bm25_rank'] = i + 1
+                doc_id_to_documents[doc_id]['rrf_score'] += rrf_score(i+1, k)
+        
+        for i, res in enumerate(res_chunked):
+            doc_id = res['id']
+            if doc_id not in doc_id_to_documents:
+                doc_id_to_documents[doc_id] = {
+                    "title": res['title'],
+                    "document": res['document'],
+                    "bm25_rank": None,
+                    "semantic_rank": i + 1,
+                    "rrf_score": rrf_score(i+1, k)
+                }
+            else:
+                doc_id_to_documents[doc_id]['semantic_rank'] = i + 1
+                doc_id_to_documents[doc_id]['rrf_score'] += rrf_score(i+1, k)
+        
+        results = []
+        for doc_id, data in doc_id_to_documents.items():
+            formatted_res = format_search_result(
+                doc_id=doc_id,
+                title=data['title'],
+                document=data['document'],
+                score=data['rrf_score'],
+                bm25_rank= data['bm25_rank'],
+                semantic_rank= data['semantic_rank'],
+            )
+            results.append(formatted_res)
+        return sorted(results, key=lambda x: x['score'], reverse=True)[:limit]
+
+def rrf_score(rank, k=RRF_SEARCH_K):
+    return 1 / (k + rank)
+
+def hybrid_score(bm25_score, semantic_score, alpha=HYBRID_ALPHA):
     return alpha * bm25_score + (1 - alpha) * semantic_score
 
 def normalize_scores(scores):
@@ -108,5 +158,17 @@ def run_weighted_search(query: str, alpha: float, limit: int):
         if 'bm25_score' in metadata and 'semantic_score' in metadata:
             print(f"    BM25: {metadata['bm25_score']:.4f}, Semantic: {metadata['semantic_score']:.4f}")
         print(f"    {result['document']}")
-              
+    return results
+
+def run_rrf_search(query: str, k: int, limit: int):
+    documents = load_movies()
+    hybrid_search = HybridSearch(documents)
+    results = hybrid_search.rrf_search(query, k, limit)
+    for i, result in enumerate(results):
+        print(f"\n{i+1}. {result['title']}")
+        print(f"    RRF Score: {result['score']:.4f}")
+        metadata = result.get('metadata', {})
+        if 'bm25_rank' in metadata and 'semantic_rank' in metadata:
+            print(f"    BM25 Rank: {metadata['bm25_rank']}, Semantic Rank: {metadata['semantic_rank']}")
+        print(f"    {result['document']}")
     return results

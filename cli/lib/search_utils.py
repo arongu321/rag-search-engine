@@ -13,6 +13,7 @@ SEMANTIC_CHUNK_MAX_SIZE = 4
 SEMANTIC_SEARCH_LIMIT = 10
 SCORE_PRECISION = 3
 HYBRID_ALPHA = 0.5
+RRF_SEARCH_K = 60
 
 # Root project directory
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
