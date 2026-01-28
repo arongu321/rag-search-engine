@@ -1,10 +1,8 @@
 import os
 import pickle
 import string
-from collections import defaultdict
-
+from collections import defaultdict, Counter
 from nltk.stem import PorterStemmer
-
 from .search_utils import (
     CACHE_DIR,
     DEFAULT_SEARCH_LIMIT,
@@ -16,8 +14,10 @@ class InvertedIndex:
     def __init__(self) -> None:
         self.index = defaultdict(set)
         self.docmap: dict[int, dict] = {}
+        self.term_frequencies = defaultdict(Counter)
         self.index_path = os.path.join(CACHE_DIR, "index.pkl")
         self.docmap_path = os.path.join(CACHE_DIR, "docmap.pkl")
+        self.term_frequencies_path = os.path.join(CACHE_DIR, "term_frequencies.pkl")
 
     def build(self) -> None:
         movies = load_movies()
@@ -33,12 +33,16 @@ class InvertedIndex:
             pickle.dump(self.index, f)
         with open(self.docmap_path, "wb") as f:
             pickle.dump(self.docmap, f)
+        with open(self.term_frequencies_path, "wb") as f:
+            pickle.dump(self.term_frequencies, f)
 
     def load(self) -> None:
         with open(self.index_path, "rb") as f:
             self.index = pickle.load(f)
         with open(self.docmap_path, "rb") as f:
             self.docmap = pickle.load(f)
+        with open(self.term_frequencies_path, "rb") as f:
+            self.term_frequencies = pickle.load(f)
 
     def get_documents(self, term: str) -> list[int]:
         doc_ids = self.index.get(term, set())
@@ -48,6 +52,10 @@ class InvertedIndex:
         tokens = tokenize_text(text)
         for token in set(tokens):
             self.index[token].add(doc_id)
+            self.term_frequencies[doc_id][token] += tokens.count(token)
+    
+    def get_tf(self, doc_id: int, term: str) -> int:
+        return self.term_frequencies[doc_id][term] if doc_id in self.term_frequencies else 0
 
 
 def build_command() -> None:
@@ -73,6 +81,13 @@ def search_command(query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> list[dict]:
                 return results
 
     return results
+
+def tf_command(doc_id: int, term: str) -> int:
+    idx = InvertedIndex()
+    idx.load()
+    processed_term = preprocess_text(term)
+    return idx.get_tf(doc_id, processed_term)
+
 
 
 def preprocess_text(text: str) -> str:
