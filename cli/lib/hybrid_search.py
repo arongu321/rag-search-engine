@@ -1,5 +1,5 @@
 import os
-
+from time import sleep
 from .keyword_search import InvertedIndex
 from .chunked_semantic_search import ChunkedSemanticSearch
 from .search_utils import (
@@ -9,6 +9,7 @@ from .search_utils import (
     HYBRID_ALPHA,
     RRF_SEARCH_K,
 )
+from cli.test_gemini import client
 
 
 class HybridSearch:
@@ -172,3 +173,42 @@ def run_rrf_search(query: str, k: int, limit: int):
             print(f"    BM25 Rank: {metadata['bm25_rank']}, Semantic Rank: {metadata['semantic_rank']}")
         print(f"    {result['document']}")
     return results
+
+def run_rerank_individual(results, query, k, limit):
+    # Simple reranking based on individual scores
+    print(f"Reranking top {limit} results using individual method...")
+    print(f"Reciprocal Rank Fusion Results for '{query}' (k={k}):")
+    for i, doc in enumerate(results):
+        sleep(3)  # To avoid rate limiting
+        rerank_prompt = f"""Rate how well this movie matches the search query.
+
+            Query: "{query}"
+            Movie: {doc.get("title", "")} - {doc.get("document", "")}
+
+            Consider:
+            - Direct relevance to query
+            - User intent (what they're looking for)
+            - Content appropriateness
+
+            Rate 0-10 (10 = perfect match).
+            Give me ONLY the number in your response, no other text or explanation.
+
+            Score:"""
+        response = client.models.generate_content(
+            model="gemini-2.5-pro",
+            contents=rerank_prompt
+        )
+        try:
+            score = float(response.text.strip())
+        except ValueError:
+            score = 0.0
+        doc['rerank_score'] = score
+    new_results = sorted(results, key=lambda x: x.get('rerank_score', 0), reverse=True)
+    for i, result in enumerate(new_results):
+        print(f"\n{i+1}. {result['title']}")
+        print(f"    Rerank Score: {result.get('rerank_score', 0):.3f}/10")
+        metadata = result.get('metadata', {})
+        if "bm25_rank" in metadata and "semantic_rank" in metadata:
+            print(f"    BM25 Rank: {metadata['bm25_rank']}, Semantic Rank: {metadata['semantic_rank']}")
+        print(f"    {result['document']}")
+    return new_results

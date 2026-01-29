@@ -1,6 +1,7 @@
 import argparse
 import sys
 from pathlib import Path
+from time import sleep
 
 # Add parent directory to path so imports work when script is run directly
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -9,6 +10,7 @@ from lib.hybrid_search import (
     normalize_scores,
     run_weighted_search,
     run_rrf_search,
+    run_rerank_individual,
 )
 from lib.search_utils import (
     DEFAULT_SEARCH_LIMIT,
@@ -37,8 +39,14 @@ def main() -> None:
     rrf_search_parser.add_argument(
         "--enhance",
         type=str,
-        choices=["spell", "rewrite"],
+        choices=["spell", "rewrite", "expand"],
         help="Query enhancement method",
+    )
+    rrf_search_parser.add_argument(
+        "--rerank-method",
+        type=str,
+        choices=["individual"],
+        help="Reranking method to apply after RRF search",
     )
     args = parser.parse_args()
 
@@ -49,7 +57,10 @@ def main() -> None:
         case "weighted-search":
             run_weighted_search(args.query, args.alpha, args.limit)
         case "rrf-search":
-            if args.enhance:
+            if args.rerank_method == "individual":
+                results = run_rrf_search(args.query, args.k, 5*args.limit)
+                run_rerank_individual(results, args.query, args.k, args.limit)
+            elif args.enhance:
                 if args.enhance == "spell":
                     fix_prompt = f"""Fix any spelling errors in this movie search query.
 
@@ -78,6 +89,21 @@ def main() -> None:
                     - "scary movie with bear from few years ago" -> "bear horror movie 2015-2020"
 
                     Rewritten query:"""
+                elif args.enhance == "expand":
+                    fix_prompt = f"""Expand this movie search query with related terms.
+
+                    Add synonyms and related concepts that might appear in movie descriptions.
+                    Keep expansions relevant and focused.
+                    This will be appended to the original query.
+
+                    Examples:
+
+                    - "scary bear movie" -> "scary horror grizzly bear movie terrifying film"
+                    - "action movie with bear" -> "action thriller bear chase fight adventure"
+                    - "comedy with bear" -> "comedy funny bear humor lighthearted"
+
+                    Query: "{args.query}"
+                    """
                 response = client.models.generate_content(
                     model="gemini-2.5-pro",
                     contents=fix_prompt
