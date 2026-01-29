@@ -10,8 +10,11 @@ from lib.hybrid_search import (
     normalize_scores,
     run_weighted_search,
     run_rrf_search,
+)
+from lib.reranks import (
     run_rerank_individual,
     run_rerank_batch,
+    run_rerank_cross_encoder
 )
 from lib.search_utils import (
     DEFAULT_SEARCH_LIMIT,
@@ -46,7 +49,7 @@ def main() -> None:
     rrf_search_parser.add_argument(
         "--rerank-method",
         type=str,
-        choices=["individual", "batch"],
+        choices=["individual", "batch", "cross_encoder"],
         help="Reranking method to apply after RRF search",
     )
     args = parser.parse_args()
@@ -64,6 +67,8 @@ def main() -> None:
                     run_rerank_individual(results, args.query, args.k, args.limit)
                 elif args.rerank_method == "batch":
                     run_rerank_batch(results, args.query, args.k, args.limit)
+                elif args.rerank_method == "cross_encoder":
+                    run_rerank_cross_encoder(results, args.query, args.k, args.limit)
             elif args.enhance:
                 if args.enhance == "spell":
                     fix_prompt = f"""Fix any spelling errors in this movie search query.
