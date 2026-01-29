@@ -21,6 +21,7 @@ from lib.search_utils import (
     HYBRID_ALPHA,
     RRF_SEARCH_K,
 )
+from lib.query_enhancement import enhance_query
 from cli.test_gemini import client
 
 def main() -> None:
@@ -70,56 +71,9 @@ def main() -> None:
                 elif args.rerank_method == "cross_encoder":
                     run_rerank_cross_encoder(results, args.query, args.k, args.limit)
             elif args.enhance:
-                if args.enhance == "spell":
-                    fix_prompt = f"""Fix any spelling errors in this movie search query.
-
-                    Only correct obvious typos. Don't change correctly spelled words or any of the capitalization.
-
-                    Query: "{args.query}"
-
-                    If no errors, return the original query.
-                    Corrected:"""
-                elif args.enhance == "rewrite":
-                    fix_prompt = f"""Rewrite this movie search query to be more specific and searchable.
-
-                    Original: "{args.query}"
-
-                    Consider:
-                    - Common movie knowledge (famous actors, popular films)
-                    - Genre conventions (horror = scary, animation = cartoon)
-                    - Keep it concise (under 10 words)
-                    - It should be a google style search query that's very specific
-                    - Don't use boolean logic
-
-                    Examples:
-
-                    - "that bear movie where leo gets attacked" -> "The Revenant Leonardo DiCaprio bear attack"
-                    - "movie about bear in london with marmalade" -> "Paddington London marmalade"
-                    - "scary movie with bear from few years ago" -> "bear horror movie 2015-2020"
-
-                    Rewritten query:"""
-                elif args.enhance == "expand":
-                    fix_prompt = f"""Expand this movie search query with related terms.
-
-                    Add synonyms and related concepts that might appear in movie descriptions.
-                    Keep expansions relevant and focused.
-                    This will be appended to the original query.
-
-                    Examples:
-
-                    - "scary bear movie" -> "scary horror grizzly bear movie terrifying film"
-                    - "action movie with bear" -> "action thriller bear chase fight adventure"
-                    - "comedy with bear" -> "comedy funny bear humor lighthearted"
-
-                    Query: "{args.query}"
-                    """
-                response = client.models.generate_content(
-                    model="gemini-2.5-pro",
-                    contents=fix_prompt
-                )
-                corrected_query = response.text.strip()
-                print( f"Enhanced query ({args.enhance}): '{args.query}' -> '{corrected_query}'\n")
-                run_rrf_search(corrected_query, args.k, args.limit)
+                enhanced_query = enhance_query(args.query, args.enhance, client)
+                print(f"Enhanced query ({args.enhance}): '{args.query}' -> '{enhanced_query}'\n")
+                run_rrf_search(enhanced_query, args.k, args.limit)
             else:
                 run_rrf_search(args.query, args.k, args.limit)
         case _:

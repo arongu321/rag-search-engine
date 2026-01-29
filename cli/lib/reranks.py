@@ -1,12 +1,76 @@
 from time import sleep
 import json
+from functools import wraps
 from cli.test_gemini import client
 from sentence_transformers import CrossEncoder
 
+
+def print_reranked_results(results, query, k, limit, score_label="Rerank Score", score_key="rerank_score"):
+    """Print reranked search results in a consistent format.
+    
+    Args:
+        results: List of search results to print
+        query: Original search query
+        k: RRF parameter k value
+        limit: Maximum number of results to display
+        score_label: Label for the reranking score (e.g., "Rerank Score", "Cross-Encoder Score")
+        score_key: Key in result dict for the reranking score
+    """
+    print(f"Reciprocal Rank Fusion Results for '{query}' (k={k}):")
+    for i, result in enumerate(results[:limit]):
+        print(f"\n{i+1}. {result['title']}")
+        
+        # Print the reranking score if present
+        if score_key in result:
+            score_value = result[score_key]
+            # Format based on score type (some are 0-10, others are similarity scores)
+            if score_key == "rerank_score":
+                print(f"    {score_label}: {score_value:.3f}/10")
+            else:
+                print(f"    {score_label}: {score_value:.4f}")
+        
+        # Print rerank rank if present
+        if "rerank_rank" in result:
+            print(f"    Rerank Rank: {result['rerank_rank']}")
+        
+        # Print RRF score if present
+        if "score" in result:
+            print(f"    RRF Score: {result['score']:.4f}")
+        
+        # Print BM25 and Semantic ranks if available
+        metadata = result.get('metadata', {})
+        if 'bm25_rank' in metadata and 'semantic_rank' in metadata:
+            print(f"    BM25 Rank: {metadata['bm25_rank']}, Semantic Rank: {metadata['semantic_rank']}")
+        
+        print(f"    {result['document']}")
+
+
+def with_result_printing(score_label, score_key):
+    """Decorator that automatically prints reranked results.
+    
+    Args:
+        score_label: Label for the reranking score display
+        score_key: Key in result dict for the reranking score
+        
+    Returns:
+        Decorator function that wraps rerank functions
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(results, query, k, limit):
+            # Call the original rerank function
+            reranked_results = func(results, query, k, limit)
+            # Automatically print the results
+            print_reranked_results(reranked_results, query, k, limit, score_label, score_key)
+            return reranked_results
+        return wrapper
+    return decorator
+
+
+@with_result_printing(score_label="Rerank Score", score_key="rerank_score")
 def run_rerank_individual(results, query, k, limit):
     # Simple reranking based on individual scores
     print(f"Reranking top {limit} results using individual method...")
-    print(f"Reciprocal Rank Fusion Results for '{query}' (k={k}):")
     for i, doc in enumerate(results):
         sleep(3)  # To avoid rate limiting
         rerank_prompt = f"""Rate how well this movie matches the search query.
@@ -32,16 +96,9 @@ def run_rerank_individual(results, query, k, limit):
         except ValueError:
             score = 0.0
         doc['rerank_score'] = score
-    new_results = sorted(results, key=lambda x: x.get('rerank_score', 0), reverse=True)
-    for i, result in enumerate(new_results):
-        print(f"\n{i+1}. {result['title']}")
-        print(f"    Rerank Score: {result.get('rerank_score', 0):.3f}/10")
-        metadata = result.get('metadata', {})
-        if "bm25_rank" in metadata and "semantic_rank" in metadata:
-            print(f"    BM25 Rank: {metadata['bm25_rank']}, Semantic Rank: {metadata['semantic_rank']}")
-        print(f"    {result['document']}")
-    return new_results
+    return sorted(results, key=lambda x: x.get('rerank_score', 0), reverse=True)
 
+@with_result_printing(score_label="Rerank Rank", score_key="rerank_rank")
 def run_rerank_batch(results, query, k, limit):
     print(f"Reranking top {limit} results using batch method...\n")
     
@@ -80,19 +137,9 @@ def run_rerank_batch(results, query, k, limit):
     for i, doc_id in enumerate(ranked_ids):
         reranked_results.append({**id_to_doc[doc_id], "rerank_rank": i+1})
     
-    print(f"Reciprocal Rank Fusion Results for '{query}' (k={k}):")
-    # Print the reranked results
-    for i, result in enumerate(reranked_results[:limit]):
-        print(f"\n{i+1}. {result['title']}")
-        print(f"    Rerank Rank: {result.get('rerank_rank', i+1)}")
-        print(f"    RRF Score: {result['score']:.4f}")
-        metadata = result.get('metadata', {})
-        if 'bm25_rank' in metadata and 'semantic_rank' in metadata:
-            print(f"    BM25 Rank: {metadata['bm25_rank']}, Semantic Rank: {metadata['semantic_rank']}")
-        print(f"    {result['document']}")
-    
     return reranked_results[:limit]
 
+@with_result_printing(score_label="Cross-Encoder Score", score_key="cross_encoder_score")
 def run_rerank_cross_encoder(results, query, k, limit):
     print(f"Reranking top {limit} results using cross_encoder method...\n")
     cross_encoder = CrossEncoder("cross-encoder/ms-marco-TinyBERT-L2-v2")
@@ -107,15 +154,5 @@ def run_rerank_cross_encoder(results, query, k, limit):
         doc['cross_encoder_score'] = scores[i]
     
     reranked_results = sorted(results, key=lambda x: x.get('cross_encoder_score', 0), reverse=True)
-    
-    print(f"Reciprocal Rank Fusion Results for '{query}' (k={k}):")
-    for i, result in enumerate(reranked_results[:limit]):
-        print(f"\n{i+1}. {result['title']}")
-        print(f"    Cross-Encoder Score: {result.get('cross_encoder_score', 0):.4f}")
-        print(f"    RRF Score: {result['score']:.4f}")
-        metadata = result.get('metadata', {})
-        if 'bm25_rank' in metadata and 'semantic_rank' in metadata:
-            print(f"    BM25 Rank: {metadata['bm25_rank']}, Semantic Rank: {metadata['semantic_rank']}")
-        print(f"    {result['document']}")
     
     return reranked_results[:limit]
