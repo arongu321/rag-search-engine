@@ -1,5 +1,6 @@
 import os
 from typing import Optional
+import logging
 
 from .keyword_search import InvertedIndex
 from .query_enhancement import enhance_query
@@ -13,6 +14,12 @@ from .search_utils import (
     load_movies,
 )
 from .semantic_search import ChunkedSemanticSearch
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 
 class HybridSearch:
@@ -213,19 +220,66 @@ def rrf_search_command(
     movies = load_movies()
     searcher = HybridSearch(movies)
 
+    # Stage 1: Log original query
     original_query = query
+    logging.debug("=" * 80)
+    logging.debug("STAGE 1: Original Query")
+    logging.debug(f"Query: '{original_query}'")
+    logging.debug("=" * 80)
+
+    # Stage 2: Query Enhancement
     enhanced_query = None
     if enhance:
         enhanced_query = enhance_query(query, method=enhance)
         query = enhanced_query
+        logging.debug("=" * 80)
+        logging.debug("STAGE 2: Query Enhancement")
+        logging.debug(f"Enhancement Method: {enhance}")
+        logging.debug(f"Original Query: '{original_query}'")
+        logging.debug(f"Enhanced Query: '{enhanced_query}'")
+        logging.debug("=" * 80)
 
+    # Stage 3: RRF Search
     search_limit = limit * SEARCH_MULTIPLIER if rerank_method else limit
     results = searcher.rrf_search(query, k, search_limit)
+    
+    logging.debug("=" * 80)
+    logging.debug("STAGE 3: RRF Search Results")
+    logging.debug(f"Search Query: '{query}'")
+    logging.debug(f"K Parameter: {k}")
+    logging.debug(f"Number of Results: {len(results)}")
+    logging.debug("Top 5 Results:")
+    for i, result in enumerate(results[:5], 1):
+        logging.debug(f"  {i}. {result['title']} (RRF Score: {result.get('score', 0):.4f})")
+        metadata = result.get('metadata', {})
+        if metadata.get('bm25_rank') or metadata.get('semantic_rank'):
+            logging.debug(f"     BM25 Rank: {metadata.get('bm25_rank', 'N/A')}, "
+                         f"Semantic Rank: {metadata.get('semantic_rank', 'N/A')}")
+    logging.debug("=" * 80)
 
+    # Stage 4: Re-ranking
     reranked = False
     if rerank_method:
+        logging.debug("=" * 80)
+        logging.debug("STAGE 4: Re-ranking")
+        logging.debug(f"Re-ranking Method: {rerank_method}")
+        logging.debug(f"Re-ranking {len(results)} results to top {limit}")
+        
         results = rerank(query, results, method=rerank_method, limit=limit)
         reranked = True
+        
+        logging.debug(f"Final Results After Re-ranking ({len(results)} results):")
+        for i, result in enumerate(results, 1):
+            score_info = []
+            if 'individual_score' in result:
+                score_info.append(f"Rerank: {result['individual_score']:.2f}/10")
+            if 'batch_rank' in result:
+                score_info.append(f"Batch Rank: {result['batch_rank']}")
+            if 'crossencoder_score' in result:
+                score_info.append(f"CrossEncoder: {result['crossencoder_score']:.4f}")
+            score_str = ", ".join(score_info) if score_info else f"RRF: {result.get('score', 0):.4f}"
+            logging.debug(f"  {i}. {result['title']} ({score_str})")
+        logging.debug("=" * 80)
 
     return {
         "original_query": original_query,

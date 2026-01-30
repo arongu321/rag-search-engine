@@ -27,6 +27,10 @@ def recall_at_k(
             relevant_count += 1
     return relevant_count / len(relevant_docs)
 
+def f1_score(precision: float, recall: float) -> float:
+    if precision + recall == 0:
+        return 0.0
+    return 2 * (precision * recall) / (precision + recall)
 
 def evaluate_command(limit: int = 5) -> dict:
     movies = load_movies()
@@ -38,6 +42,8 @@ def evaluate_command(limit: int = 5) -> dict:
     hybrid_search = HybridSearch(movies)
 
     total_precision = 0
+    total_recall = 0
+    total_f1 = 0
     results_by_query = {}
     for test_case in test_cases:
         query = test_case["query"]
@@ -51,15 +57,19 @@ def evaluate_command(limit: int = 5) -> dict:
 
         precision = precision_at_k(retrieved_docs, relevant_docs, limit)
         recall = recall_at_k(retrieved_docs, relevant_docs, limit)
+        f1 = f1_score(precision, recall)
 
         results_by_query[query] = {
             "precision": precision,
             "recall": recall,
+            "f1_score": f1,
             "retrieved": retrieved_docs[:limit],
             "relevant": list(relevant_docs),
         }
 
         total_precision += precision
+        total_recall += recall
+        total_f1 += f1
 
     return {
         "test_cases_count": len(test_cases),
