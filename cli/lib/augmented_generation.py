@@ -7,6 +7,15 @@ from .search_utils import (
     load_movies,
 )
 
+def get_search_results(query, limit=5):
+    movies = load_movies()
+    hybrid_search = HybridSearch(movies)
+
+    search_results = hybrid_search.rrf_search(
+        query, k=RRF_K, limit=limit * SEARCH_MULTIPLIER
+    )
+
+    return search_results[:limit]
 
 def generate_answer(search_results, query, limit=5):
     context = ""
@@ -52,12 +61,7 @@ Provide a comprehensive 3–4 sentence answer that combines information from mul
 
 
 def rag(query, limit=DEFAULT_SEARCH_LIMIT):
-    movies = load_movies()
-    hybrid_search = HybridSearch(movies)
-
-    search_results = hybrid_search.rrf_search(
-        query, k=RRF_K, limit=limit * SEARCH_MULTIPLIER
-    )
+    search_results = get_search_results(query, limit=limit * SEARCH_MULTIPLIER)
 
     if not search_results:
         return {
@@ -101,17 +105,39 @@ def get_citations_text(search_results, query, limit=5):
     response = client.models.generate_content(model=model, contents=prompt)
     return (response.text or "").strip()
 
+def get_response_from_question(search_results, question, limit=5):
+    context = ""
+
+    for result in search_results[:limit]:
+        context += f"{result['title']}: {result['document']}\n\n"
+        
+    prompt = f"""Answer the user's question based on the provided movies that are available on Hoopla.
+
+        This should be tailored to Hoopla users. Hoopla is a movie streaming service.
+
+        Question: {question}
+
+        Documents:
+        {context}
+
+        Instructions:
+        - Answer questions directly and concisely
+        - Be casual and conversational
+        - Don't be cringe or hype-y
+        - Talk like a normal person would in a chat conversation
+
+        Answer:
+    """
+    
+    response = client.models.generate_content(model=model, contents=prompt)
+    return (response.text or "").strip()
+
 def rag_command(query):
     return rag(query)
 
 
 def summarize_command(query, limit=5):
-    movies = load_movies()
-    hybrid_search = HybridSearch(movies)
-
-    search_results = hybrid_search.rrf_search(
-        query, k=RRF_K, limit=limit * SEARCH_MULTIPLIER
-    )
+    search_results = get_search_results(query, limit=limit * SEARCH_MULTIPLIER)
 
     if not search_results:
         return {"query": query, "error": "No results found"}
@@ -125,12 +151,7 @@ def summarize_command(query, limit=5):
     }
     
 def citations_command(query, limit=5):
-    movies = load_movies()
-    hybrid_search = HybridSearch(movies)
-
-    search_results = hybrid_search.rrf_search(
-        query, k=RRF_K, limit=limit * SEARCH_MULTIPLIER
-    )
+    search_results = get_search_results(query, limit=limit * SEARCH_MULTIPLIER)
 
     if not search_results:
         return {"query": query, "error": "No results found"}
@@ -141,4 +162,17 @@ def citations_command(query, limit=5):
         "query": query,
         "citations": citations,
         "search_results": search_results[:limit],
+    }
+
+def questions_command(question, limit=5):
+    search_results = get_search_results(question, limit=limit * SEARCH_MULTIPLIER)
+    if not search_results:
+        return {"question": question, "error": "No results found"}
+
+    answer = get_response_from_question(search_results, question, limit)
+
+    return {
+        "question": question,
+        "search_results": search_results[:limit],
+        "answer": answer,
     }
