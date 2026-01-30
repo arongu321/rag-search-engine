@@ -2,6 +2,7 @@ import argparse
 from lib.augmented_generation import (
     rag_command,
     summarize_command,
+    citations_command
 )
 
 def main():
@@ -20,6 +21,10 @@ def main():
     
     rag_parser.add_argument("query", type=str, help="Search query for RAG")
 
+    citations_parser = subparsers.add_parser("citations", help="Get citations for a given text")
+    citations_parser.add_argument("query", type=str, help="Text to get citations for")
+    citations_parser.add_argument("--limit", type=int, default=5, help="Number of documents to retrieve for citations")
+    
     args = parser.parse_args()
 
     match args.command:
@@ -27,17 +32,24 @@ def main():
             # do RAG stuff here
             res = rag_command(args.query)
             print("Search Results:")
-            for doc in res["retrieved_documents"]:
-                print(f"- {doc}")
+            for doc in res["search_results"]:
+                print(f"- {doc['title']}")
             print("\nRAG Response:")
             print(res["answer"])
         case "summarize":
             res = summarize_command(args.query, args.limit)
             print("Search Results:")
-            for doc in res["retrieved_documents"]:
-                print(f"- {doc}")
+            for doc in res["search_results"]:
+                print(f"- {doc['title']}")
             print("\nLLM Summary:")
             print(res["summary"])
+        case "citations":
+            res = citations_command(args.query, args.limit)
+            print("Search Results:")
+            for doc in res["search_results"]:
+                print(f"- {doc['title']}")
+            print("\nLLM Answer:")
+            print(res["citations"])
         case _:
             parser.print_help()
 
