@@ -1,31 +1,32 @@
-"""Query enhancement utilities for search improvement."""
+import os
+from typing import Optional
 
-from typing import Literal
+from dotenv import load_dotenv
+from google import genai
 
-EnhancementType = Literal["spell", "rewrite", "expand"]
+load_dotenv()
+api_key = os.getenv("gemini_api_key")
+client = genai.Client(api_key=api_key)
+model = "gemini-2.5-flash"
 
 
-def get_enhancement_prompt(query: str, enhancement_type: EnhancementType) -> str:
-    """Get the appropriate enhancement prompt for a given query and type.
-    
-    Args:
-        query: The original search query
-        enhancement_type: Type of enhancement to apply
-        
-    Returns:
-        Formatted prompt for the LLM
-    """
-    prompts = {
-        "spell": f"""Fix any spelling errors in this movie search query.
+def spell_correct(query: str) -> str:
+    prompt = f"""Fix any spelling errors in this movie search query.
 
-Only correct obvious typos. Don't change correctly spelled words or any of the capitalization.
+Only correct obvious typos. Don't change correctly spelled words.
 
 Query: "{query}"
 
 If no errors, return the original query.
-Corrected:""",
-        
-        "rewrite": f"""Rewrite this movie search query to be more specific and searchable.
+Corrected:"""
+
+    response = client.models.generate_content(model=model, contents=prompt)
+    corrected = (response.text or "").strip().strip('"')
+    return corrected if corrected else query
+
+
+def rewrite_query(query: str) -> str:
+    prompt = f"""Rewrite this movie search query to be more specific and searchable.
 
 Original: "{query}"
 
@@ -42,9 +43,15 @@ Examples:
 - "movie about bear in london with marmalade" -> "Paddington London marmalade"
 - "scary movie with bear from few years ago" -> "bear horror movie 2015-2020"
 
-Rewritten query:""",
-        
-        "expand": f"""Expand this movie search query with related terms.
+Rewritten query:"""
+
+    response = client.models.generate_content(model=model, contents=prompt)
+    rewritten = (response.text or "").strip().strip('"')
+    return rewritten if rewritten else query
+
+
+def expand_query(query: str) -> str:
+    prompt = f"""Expand this movie search query with related terms.
 
 Add synonyms and related concepts that might appear in movie descriptions.
 Keep expansions relevant and focused.
@@ -58,25 +65,20 @@ Examples:
 
 Query: "{query}"
 """
-    }
-    
-    return prompts[enhancement_type]
+
+    response = client.models.generate_content(model=model, contents=prompt)
+    expanded_terms = (response.text or "").strip().strip('"')
+
+    return f"{query} {expanded_terms}"
 
 
-def enhance_query(query: str, enhancement_type: EnhancementType, client) -> str:
-    """Enhance a query using the specified enhancement type.
-    
-    Args:
-        query: Original query text
-        enhancement_type: Type of enhancement to apply
-        client: Gemini API client
-        
-    Returns:
-        Enhanced query text
-    """
-    prompt = get_enhancement_prompt(query, enhancement_type)
-    response = client.models.generate_content(
-        model="gemini-2.5-pro",
-        contents=prompt
-    )
-    return response.text.strip()
+def enhance_query(query: str, method: Optional[str] = None) -> str:
+    match method:
+        case "spell":
+            return spell_correct(query)
+        case "rewrite":
+            return rewrite_query(query)
+        case "expand":
+            return expand_query(query)
+        case _:
+            return query
